@@ -212,15 +212,26 @@
         }
       };
 
-      // وظيفة لمشاركة تفاصيل الطلب على واتساب.
+    // وظيفة لمشاركة تفاصيل الطلب على واتساب.
       const handleShare = () => {
+        // نص المشاركة الآن يضم كل التفاصيل
         const shareText = `*تم إرسال طلب جديد!*
 -----------------------------
 *رقم الطلب:* ${orderId}
-*نوع الرصيد:* ${formData.balance_type === 'crypto' ? formData.crypto_name : formData.wallet_name}
-*الكمية:* ${formData.amount_requested}
-*الرسوم:* ${formData.service_fee_value.toFixed(2)} USD
-*المبلغ النهائي:* ${formData.final_amount_due_converted.toFixed(2)} ${formData.payment_currency}`;
+*نوع الرصيد:* ${formData.balance_type === 'crypto' ? 'عملة رقمية' : 'محفظة إلكترونية'}
+${formData.balance_type === 'crypto' ? `*العملة الرقمية:* ${formData.crypto_name}` : `*اسم المحفظة:* ${formData.wallet_name}`}
+${formData.balance_type === 'crypto' ? `*الشبكة:* ${formData.crypto_network}` : `*عملة المحفظة:* ${formData.wallet_currency}`}
+*الكمية المطلوبة:* ${formData.amount_requested}
+*رسوم الخدمة:* ${formData.service_fee_value.toFixed(2)} USD
+*عنوان الاستلام:* ${formData.receiver_address}
+*الملاحظات:* ${formData.notes || 'لا توجد'}
+*طريقة الدفع:* ${formData.payment_method}
+*عملة الدفع:* ${formData.payment_currency}
+*المبلغ النهائي المطلوب (USD):* ${formData.final_amount_due_usd.toFixed(2)} USD
+*المبلغ النهائي المطلوب بالعملة المحلية:* ${formData.final_amount_due_converted.toFixed(2)} ${formData.payment_currency}
+-----------------------------
+سيتم التواصل معك قريباً لإتمام عملية الدفع.`;
+
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
         window.open(whatsappUrl, '_blank');
       };
