@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نموذج طلب رصيد رقمي</title>
+    <title>نموذج طلب سحب رصيد</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -86,17 +86,19 @@
             margin-top: 1rem;
             font-size: 0.9rem;
         }
-        .countdown-bar {
-            height: 5px;
-            background-color: #e2e8f0;
-            border-radius: 9999px;
-            overflow: hidden;
-            margin-top: 0.5rem;
+        .info-box.red {
+            background-color: #ffe9e9;
+            border-color: #ffb3b3;
+            color: #b30000;
         }
-        .countdown-progress {
-            height: 100%;
-            background-color: #3b82f6;
-            transition: width 1s linear;
+        .total-amount-box {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background-color: #e2f0d9;
+            border: 1px solid #c8e6c9;
+            border-radius: 4px;
+            font-weight: bold;
+            text-align: center;
         }
     </style>
 </head>
@@ -116,122 +118,50 @@
         const App = () => {
             const [formData, setFormData] = useState({
                 balance_type: '',
-                crypto_name: '',
-                other_crypto_name: '',
+                crypto_name: 'USDT',
                 crypto_network: '',
-                other_crypto_network: '',
                 wallet_name: '',
-                other_wallet_name: '',
-                wallet_currency: '',
-                other_wallet_currency: '',
+                wallet_currency: 'USD',
                 amount_requested: '',
                 service_fee_value: 0,
-                receiver_address: '',
+                sender_address: '',
                 notes: '',
-                payment_method: '',
-                other_payment_method: '',
-                payment_currency: 'ريال سعودي',
-                final_amount_due_usd: 0,
-                final_amount_due_converted: 0,
+                payout_method: '',
+                payout_currency: 'ريال يمني جديد',
+                receiver_bank_info: '',
+                final_amount_due_local: 0,
             });
 
             const [formSubmitted, setFormSubmitted] = useState(false);
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [orderId, setOrderId] = useState('');
-            const [cryptoPrices, setCryptoPrices] = useState({
-                BTC: null,
-                ETH: null,
-                SOL: null
-            });
-            const [isPriceLoading, setIsPriceLoading] = useState(false);
             const [error, setError] = useState('');
-            const [countdown, setCountdown] = useState(60);
 
             const exchangeRates = {
-                'ريال سعودي': 3.83,
-                'ريال يمني شمال': 538,
-                'ريال يمني جنوب': 2000,
+                'ريال سعودي': 3.8,
+                'ريال يمني قديم': 533,
+                'ريال يمني جديد': 1600,
+            };
+            const feeRates = {
+                flat_fee: 1, // for amounts <= 50
+                percentage_fee: 0.02, // 2% for amounts > 50
             };
 
-            const cryptoSymbolMap = {
-                'Bitcoin': 'BTC',
-                'Ethereum': 'ETH',
-                'Solana': 'SOL',
-                'USDT': 'USDT'
-            };
-
-            const fetchAllCryptoPrices = async () => {
-                const specialFeeCryptos = ['Bitcoin', 'Solana', 'Ethereum'];
-                if (formData.balance_type !== 'crypto' || !specialFeeCryptos.includes(formData.crypto_name)) {
-                    return;
-                }
-
-                setIsPriceLoading(true);
-                const baseUrl = 'https://min-api.cryptocompare.com/data/pricemulti';
-                const params = { "fsyms": "BTC,ETH,SOL", "tsyms": "USDT" };
-                const url = new URL(baseUrl);
-                url.search = new URLSearchParams(params).toString();
-                try {
-                    const response = await fetch(url);
-                    const data = await response.json();
-                    if (data) {
-                        setCryptoPrices({
-                            BTC: data.BTC ? data.BTC.USDT : cryptoPrices.BTC,
-                            ETH: data.ETH ? data.ETH.USDT : cryptoPrices.ETH,
-                            SOL: data.SOL ? data.SOL.USDT : cryptoPrices.SOL
-                        });
-                    }
-                } catch (e) {
-                    console.error('فشل جلب أسعار العملات الرقمية من CryptoCompare:', e);
-                } finally {
-                    setIsPriceLoading(false);
-                }
-            };
-            
-            // Effect to fetch initial price when a crypto is selected
-            useEffect(() => {
-                if (formData.balance_type === 'crypto' && ['Bitcoin', 'Solana', 'Ethereum'].includes(formData.crypto_name)) {
-                    fetchAllCryptoPrices();
-                }
-            }, [formData.crypto_name]);
-
-            // Effect for countdown timer
-            useEffect(() => {
-                if (formData.balance_type === 'crypto' && ['Bitcoin', 'Solana', 'Ethereum'].includes(formData.crypto_name)) {
-                    const timer = setInterval(() => {
-                        setCountdown(prev => {
-                            if (prev <= 1) {
-                                fetchAllCryptoPrices();
-                                return 60;
-                            }
-                            return prev - 1;
-                        });
-                    }, 1000);
-                    return () => clearInterval(timer);
+            const calculateServiceFee = (amount) => {
+                if (amount <= 50) {
+                    return feeRates.flat_fee;
                 } else {
-                    // Reset countdown if crypto is not selected
-                    setCountdown(60);
+                    return amount * feeRates.percentage_fee;
                 }
-            }, [formData.balance_type, formData.crypto_name]);
+            };
 
-            const calculateServiceFee = (amount, balanceType, cryptoName, walletName, cryptoPrice) => {
-                if (balanceType === 'wallet' && (walletName === 'PayPal' || walletName === 'Payoneer')) {
-                    return amount * 0.10;
-                }
-                const specialFeeCryptos = ['Bitcoin', 'Solana', 'Ethereum'];
-                if (balanceType === 'crypto' && specialFeeCryptos.includes(cryptoName)) {
-                    const dollarValue = amount * cryptoPrice;
-                    return dollarValue * 0.06;
-                }
-                if (amount < 10) {
-                    return 2;
-                } else if (amount <= 50) {
-                    return 2.5;
-                } else if (amount <= 1000) {
-                    return amount * 0.05;
-                } else {
-                    return amount * 0.045;
-                }
+            const calculateFinalAmount = (amount, fee, localCurrency) => {
+                const amountAfterFee = amount - fee;
+                const convertedAmount = amountAfterFee * (exchangeRates[localCurrency] || 1);
+                return {
+                    amount_after_fee: amountAfterFee,
+                    converted_amount: convertedAmount,
+                };
             };
 
             useEffect(() => {
@@ -240,89 +170,43 @@
                     setFormData(prev => ({
                         ...prev,
                         service_fee_value: 0,
-                        final_amount_due_usd: 0,
-                        final_amount_due_converted: 0,
+                        final_amount_due_local: 0,
                     }));
                     return;
                 }
 
-                const updatedPaymentCurrency = formData.payment_currency;
-                const cryptoSymbol = cryptoSymbolMap[formData.crypto_name];
-                let currentCryptoPrice = 1;
-                if (cryptoSymbol === 'USDT') {
-                    currentCryptoPrice = 1;
-                } else if (cryptoSymbol && cryptoPrices[cryptoSymbol]) {
-                    currentCryptoPrice = cryptoPrices[cryptoSymbol];
-                }
-
-                const fee = calculateServiceFee(updatedAmount, formData.balance_type, formData.crypto_name, formData.wallet_name, currentCryptoPrice);
-
-                const amounts = calculateFinalAmount(updatedAmount, fee, currentCryptoPrice, updatedPaymentCurrency, formData.balance_type);
+                const fee = calculateServiceFee(updatedAmount);
+                const amounts = calculateFinalAmount(updatedAmount, fee, formData.payout_currency);
 
                 setFormData(prev => ({
                     ...prev,
                     service_fee_value: fee,
-                    final_amount_due_usd: amounts.totalUSD,
-                    final_amount_due_converted: amounts.convertedAmount,
+                    final_amount_due_local: amounts.converted_amount,
                 }));
-            }, [formData.amount_requested, formData.payment_currency, formData.crypto_name, formData.balance_type, formData.wallet_name, cryptoPrices]);
 
-            const calculateFinalAmount = (amount, fee, currentCryptoPrice, paymentCurrency, balanceType) => {
-                let totalUSD = 0;
-                if (balanceType === 'crypto') {
-                    totalUSD = (amount * currentCryptoPrice) + fee;
-                } else {
-                    totalUSD = amount + fee;
-                }
-                const convertedAmount = paymentCurrency === 'دولار أمريكي' ? totalUSD : totalUSD * (exchangeRates[paymentCurrency] || 1);
-                return {
-                    totalUSD: totalUSD,
-                    convertedAmount: convertedAmount,
-                };
-            };
+            }, [formData.amount_requested, formData.payout_currency]);
 
             const handleInputChange = (e) => {
                 const { name, value } = e.target;
-                let newFormData = { ...formData, [name]: value };
-
-                if (name === 'balance_type') {
-                    newFormData = {
-                        ...newFormData,
-                        crypto_name: '',
-                        other_crypto_name: '',
-                        crypto_network: '',
-                        other_crypto_network: '',
-                        wallet_name: '',
-                        other_wallet_name: '',
-                        wallet_currency: '',
-                        other_wallet_currency: '',
-                        payment_method: '',
-                        other_payment_method: '',
-                    };
-                }
-                setFormData(newFormData);
+                setFormData(prev => ({ ...prev, [name]: value }));
             };
-            
-            const handleOtherInputChange = (e) => {
-                const { name, value } = e.target;
-                setFormData(prev => ({
-                    ...prev,
-                    [name]: value
-                }));
-            };
-
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 setError('');
                 setIsSubmitting(true);
                 if (parseFloat(formData.amount_requested) <= 0) {
-                    setError('الكمية المطلوبة يجب أن تكون أكبر من صفر.');
+                    setError('المبلغ المطلوب سحبه يجب أن يكون أكبر من صفر.');
                     setIsSubmitting(false);
                     return;
                 }
-                
-                const pseudoOrderId = 'ORD-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+                if (parseFloat(formData.amount_requested) <= formData.service_fee_value) {
+                    setError('المبلغ المطلوب سحبه يجب أن يكون أكبر من رسوم الخدمة.');
+                    setIsSubmitting(false);
+                    return;
+                }
+
+                const pseudoOrderId = 'WITHDRAW-' + Math.random().toString(36).substr(2, 9).toUpperCase();
                 setOrderId(pseudoOrderId);
                 setFormSubmitted(true);
                 setIsSubmitting(false);
@@ -332,241 +216,37 @@
                 const sanitizedFormData = Object.fromEntries(
                     Object.entries(formData).map(([key, value]) => [key, sanitizeInput(value)])
                 );
-                
-                const cryptoNameForShare = formData.crypto_name === 'أخرى' ? formData.other_crypto_name : formData.crypto_name;
-                const cryptoNetworkForShare = formData.crypto_network === 'أخرى' ? formData.other_crypto_network : formData.crypto_network;
-                const walletNameForShare = formData.wallet_name === 'أخرى' ? formData.other_wallet_name : formData.wallet_name;
-                const walletCurrencyForShare = formData.wallet_currency === 'أخرى' ? formData.other_wallet_currency : formData.wallet_currency;
-                const paymentMethodForShare = formData.payment_method === 'أخرى' ? formData.other_payment_method : formData.payment_method;
 
+                const payoutMethodForShare = sanitizedFormData.payout_method;
 
-                const orderDetails = formData.balance_type === 'crypto'
-                    ? `
-*نوع الرصيد:* عملة رقمية
-*العملة الرقمية:* ${sanitizeInput(cryptoNameForShare)}
-*الشبكة:* ${sanitizeInput(cryptoNetworkForShare)}`
-                    : `
-*نوع الرصيد:* محفظة إلكترونية
-*اسم المحفظة:* ${sanitizeInput(walletNameForShare)}
-*عملة المحفظة:* ${sanitizeInput(walletCurrencyForShare)}`;
-
-                const shareText = `*تم إرسال طلب جديد!*
+                const shareText = `*تم إرسال طلب سحب جديد!*
 -----------------------------
 *رقم الطلب:* ${sanitizeInput(orderId)}
-${orderDetails}
-*الكمية المطلوبة:* ${sanitizeInput(formData.amount_requested)}
-*رسوم الخدمة:* ${sanitizeInput(formData.service_fee_value.toFixed(2))} USD
-*عنوان الاستلام:* ${sanitizeInput(formData.receiver_address)}
-*الملاحظات:* ${sanitizeInput(formData.notes) || 'لا توجد'}
-*طريقة الدفع:* ${sanitizeInput(paymentMethodForShare)}
-*العملة التي ستدفع بها:* ${sanitizeInput(formData.payment_currency)}
-*المبلغ النهائي المطلوب دفعه (بالدولار):* ${sanitizeInput(formData.final_amount_due_usd.toFixed(2))} USD
-*المبلغ النهائي المطلوب دفعه (بالعملة المحلية):* ${sanitizeInput(formData.final_amount_due_converted.toFixed(2))} ${sanitizeInput(formData.payment_currency)}`;
+*نوع الرصيد:* محفظة إلكترونية
+*اسم المحفظة:* ${sanitizeInput(sanitizedFormData.wallet_name)}
+*عملة المحفظة:* ${sanitizeInput(sanitizedFormData.wallet_currency)}
+*المبلغ المطلوب سحبه:* ${sanitizeInput(sanitizedFormData.amount_requested)} ${sanitizeInput(sanitizedFormData.wallet_currency)}
+*رسوم الخدمة:* ${sanitizeInput(sanitizedFormData.service_fee_value.toFixed(2))} ${sanitizeInput(sanitizedFormData.wallet_currency)}
+*المبلغ المستلم بعد الرسوم:* ${(parseFloat(sanitizedFormData.amount_requested) - parseFloat(sanitizedFormData.service_fee_value)).toFixed(2)} ${sanitizeInput(sanitizedFormData.wallet_currency)}
+*عنوان الإرسال:* ${sanitizeInput(sanitizedFormData.sender_address)}
+*الملاحظات:* ${sanitizeInput(sanitizedFormData.notes) || 'لا توجد'}
+*طريقة الاستلام:* ${sanitizeInput(payoutMethodForShare)}
+*العملة المحلية المطلوبة:* ${sanitizeInput(sanitizedFormData.payout_currency)}
+*المبلغ النهائي للاستلام (بالعملة المحلية):* ${sanitizeInput(sanitizedFormData.final_amount_due_local.toFixed(2))} ${sanitizeInput(sanitizedFormData.payout_currency)}
+*بيانات حساب الاستلام:* ${sanitizeInput(sanitizedFormData.receiver_bank_info)}`;
 
                 const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
                 window.open(whatsappUrl, '_blank');
             };
 
-            const renderCryptoSection = () => (
-                <>
-                    <div className="form-field">
-                        <label>
-                            <span className="emoji">💱</span> ما اسم العملة الرقمية؟
-                        </label>
-                        <p className="field-description">اختر نوع العملة الرقمية التي تريد شحنها.</p>
-                        <select
-                            name="crypto_name"
-                            value={formData.crypto_name}
-                            onChange={handleInputChange}
-                            required
-                        >
-                            <option value="">اختر...</option>
-                            <option value="USDT">USDT</option>
-                            <option value="Bitcoin">Bitcoin</option>
-                            <option value="Solana">Solana</option>
-                            <option value="Ethereum">Ethereum</option>
-                            <option value="أخرى">أخرى</option>
-                        </select>
-                        {formData.crypto_name === 'أخرى' && (
-                            <input
-                                type="text"
-                                name="other_crypto_name"
-                                value={formData.other_crypto_name}
-                                onChange={handleOtherInputChange}
-                                placeholder="اكتب اسم العملة..."
-                                className="mt-2"
-                                required
-                            />
-                        )}
-                    </div>
-                    <div className="form-field">
-                        <label>
-                            <span className="emoji">📡</span> ما هي الشبكة المطلوبة؟
-                        </label>
-                        <p className="field-description">حدد شبكة البلوك تشين التي ستتم عليها عملية الشحن.</p>
-                        <select
-                            name="crypto_network"
-                            value={formData.crypto_network}
-                            onChange={handleInputChange}
-                            required
-                        >
-                            <option value="">اختر...</option>
-                            <option value="BEP20">BEP20</option>
-                            <option value="TRC20">TRC20</option>
-                            <option value="ERC20">ERC20</option>
-                            <option value="Solana">Solana</option>
-                            <option value="أخرى">أخرى</option>
-                        </select>
-                        {formData.crypto_network === 'أخرى' && (
-                            <input
-                                type="text"
-                                name="other_crypto_network"
-                                value={formData.other_crypto_network}
-                                onChange={handleOtherInputChange}
-                                placeholder="اكتب اسم الشبكة..."
-                                className="mt-2"
-                                required
-                            />
-                        )}
-                    </div>
-                    {(formData.crypto_name === 'Bitcoin' || formData.crypto_name === 'Solana' || formData.crypto_name === 'Ethereum') && (
-                        <div className="info-box my-2">
-                            <div className="flex items-center">
-                                {isPriceLoading || cryptoPrices[cryptoSymbolMap[formData.crypto_name]] === null ? (
-                                    <>
-                                        <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent ml-2"></div>
-                                        <p className="text-sm text-blue-800">جاري جلب السعر...</p>
-                                    </>
-                                ) : (
-                                    <p className="text-sm text-blue-800">
-                                        السعر الحالي لـ {formData.crypto_name}: ~{cryptoPrices[cryptoSymbolMap[formData.crypto_name]]?.toFixed(2)} دولار أمريكي
-                                    </p>
-                                )}
-                            </div>
-                            {!isPriceLoading && cryptoPrices[cryptoSymbolMap[formData.crypto_name]] !== null && (
-                                <div className="countdown-bar">
-                                    <div className="countdown-progress" style={{ width: `${(countdown / 60) * 100}%` }}></div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </>
-            );
-
-            const renderWalletSection = () => (
-                <>
-                    <div className="form-field">
-                        <label>
-                            <span className="emoji">👛</span> ما اسم المحفظة؟
-                        </label>
-                        <p className="field-description">اختر نوع المحفظة الإلكترونية التي تريد الشحن إليها.</p>
-                        <select
-                            name="wallet_name"
-                            value={formData.wallet_name}
-                            onChange={handleInputChange}
-                            required
-                        >
-                            <option value="">اختر...</option>
-                            <option value="PayPal">PayPal</option>
-                            <option value="Payoneer">Payoneer</option>
-                            <option value="Perfect Money">Perfect Money</option>
-                            <option value="أخرى">أخرى</option>
-                        </select>
-                        {formData.wallet_name === 'أخرى' && (
-                            <input
-                                type="text"
-                                name="other_wallet_name"
-                                value={formData.other_wallet_name}
-                                onChange={handleOtherInputChange}
-                                placeholder="اكتب اسم المحفظة..."
-                                className="mt-2"
-                                required
-                            />
-                        )}
-                    </div>
-                    <div className="form-field">
-                        <label>
-                            <span className="emoji">💵</span> العملة داخل المحفظة؟
-                        </label>
-                        <p className="field-description">حدد عملة المحفظة المطلوبة.</p>
-                        <select
-                            name="wallet_currency"
-                            value={formData.wallet_currency}
-                            onChange={handleInputChange}
-                            required
-                        >
-                            <option value="">اختر...</option>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
-                            <option value="GBP">GBP</option>
-                            <option value="أخرى">أخرى</option>
-                        </select>
-                        {formData.wallet_currency === 'أخرى' && (
-                            <input
-                                type="text"
-                                name="other_wallet_currency"
-                                value={formData.other_wallet_currency}
-                                onChange={handleOtherInputChange}
-                                placeholder="اكتب عملة المحفظة..."
-                                className="mt-2"
-                                required
-                            />
-                        )}
-                    </div>
-                </>
-            );
-
-            const renderPaymentMethodSection = () => (
-                <>
-                    <div className="form-field">
-                        <label>
-                            <span className="emoji">🏦</span> طريقة الدفع المفضلة
-                        </label>
-                        <p className="field-description">اختر الطريقة التي تفضلها لإرسال قيمة الطلب.</p>
-                        <select
-                            name="payment_method"
-                            value={formData.payment_method}
-                            onChange={handleInputChange}
-                            required
-                        >
-                            <option value="">اختر...</option>
-                            <option value="العمقي">العمقي</option>
-                            <option value="بنك القطيبي">بنك القطيبي</option>
-                            <option value="بنك الكريمي">بنك الكريمي</option>
-                            <option value="بن دول للصرافه">بن دول للصرافه</option>
-                            <option value="بنك بن دول">بنك بن دول</option>
-                            <option value="الشبكه الموحده">الشبكه الموحده</option>
-                            <option value="النجم">النجم</option>
-                            <option value="محفظه جيب">محفظه جيب</option>
-                            <option value="محفظه جوالي">محفظه جوالي</option>
-                            <option value="محفظه كاش">محفظه كاش</option>
-                            <option value="أخرى">أخرى</option>
-                        </select>
-                        {formData.payment_method === 'أخرى' && (
-                            <input
-                                type="text"
-                                name="other_payment_method"
-                                value={formData.other_payment_method}
-                                onChange={handleOtherInputChange}
-                                placeholder="اكتب طريقة الدفع..."
-                                className="mt-2"
-                                required
-                            />
-                        )}
-                    </div>
-                </>
-            );
 
             if (formSubmitted) {
-                const cryptoNameForShare = formData.crypto_name === 'أخرى' ? formData.other_crypto_name : formData.crypto_name;
-                const cryptoNetworkForShare = formData.crypto_network === 'أخرى' ? formData.other_crypto_network : formData.crypto_network;
-                const walletNameForShare = formData.wallet_name === 'أخرى' ? formData.other_wallet_name : formData.wallet_name;
-                const walletCurrencyForShare = formData.wallet_currency === 'أخرى' ? formData.other_wallet_currency : formData.wallet_currency;
-                const paymentMethodForShare = formData.payment_method === 'أخرى' ? formData.other_payment_method : formData.payment_method;
-                
+                const payoutMethodForShare = formData.payout_method;
+                const amountAfterFee = parseFloat(formData.amount_requested) - parseFloat(formData.service_fee_value);
+
                 return (
                     <div className="form-container text-right">
-                        <h2 className="title">تم استلام طلبك بنجاح!</h2>
+                        <h2 className="title">تم استلام طلب سحبك بنجاح!</h2>
                         <div className="info-box my-4 p-4 text-sm bg-green-50 border-green-200">
                             <p className="font-bold text-green-800">
                                 <span className="emoji">👈</span> خطوة مهمة!
@@ -577,27 +257,18 @@ ${orderDetails}
                         </div>
                         <div className="p-4 bg-gray-100 rounded-md text-sm">
                             <p><strong>رقم الطلب:</strong> {sanitizeInput(orderId)}</p>
-                            {formData.balance_type === 'crypto' ? (
-                                <>
-                                    <p><strong>نوع الرصيد:</strong> عملة رقمية</p>
-                                    <p><strong>العملة الرقمية:</strong> {sanitizeInput(cryptoNameForShare)}</p>
-                                    <p><strong>الشبكة:</strong> {sanitizeInput(cryptoNetworkForShare)}</p>
-                                </>
-                            ) : (
-                                <>
-                                    <p><strong>نوع الرصيد:</strong> محفظة إلكترونية</p>
-                                    <p><strong>اسم المحفظة:</strong> {sanitizeInput(walletNameForShare)}</p>
-                                    <p><strong>عملة المحفظة:</strong> {sanitizeInput(walletCurrencyForShare)}</p>
-                                </>
-                            )}
-                            <p><strong>الكمية المطلوبة:</strong> {sanitizeInput(formData.amount_requested)}</p>
-                            <p><strong>رسوم الخدمة:</strong> {sanitizeInput(formData.service_fee_value.toFixed(2))} USD</p>
-                            <p><strong>عنوان الاستلام:</strong> {sanitizeInput(formData.receiver_address)}</p>
+                            <p><strong>نوع الرصيد:</strong> محفظة إلكترونية</p>
+                            <p><strong>اسم المحفظة:</strong> {sanitizeInput(formData.wallet_name)}</p>
+                            <p><strong>عملة المحفظة:</strong> {sanitizeInput(formData.wallet_currency)}</p>
+                            <p><strong>المبلغ المطلوب سحبه:</strong> {sanitizeInput(formData.amount_requested)} {sanitizeInput(formData.wallet_currency)}</p>
+                            <p><strong>رسوم الخدمة:</strong> {sanitizeInput(formData.service_fee_value.toFixed(2))} {sanitizeInput(formData.wallet_currency)}</p>
+                            <p><strong>المبلغ المستلم بعد الرسوم:</strong> {sanitizeInput(amountAfterFee.toFixed(2))} {sanitizeInput(formData.wallet_currency)}</p>
+                            <p><strong>عنوان الإرسال:</strong> {sanitizeInput(formData.sender_address)}</p>
                             <p><strong>الملاحظات:</strong> {sanitizeInput(formData.notes) || 'لا توجد'}</p>
-                            <p><strong>طريقة الدفع:</strong> {sanitizeInput(paymentMethodForShare)}</p>
-                            <p><strong>العملة التي ستدفع بها:</strong> {sanitizeInput(formData.payment_currency)}</p>
-                            <p><strong>المبلغ النهائي المطلوب دفعه (بالدولار):</strong> {sanitizeInput(formData.final_amount_due_usd.toFixed(2))} USD</p>
-                            <p><strong>المبلغ النهائي المطلوب دفعه (بالعملة المحلية):</strong> {sanitizeInput(formData.final_amount_due_converted.toFixed(2))} {sanitizeInput(formData.payment_currency)}</p>
+                            <p><strong>طريقة الاستلام:</strong> {sanitizeInput(payoutMethodForShare)}</p>
+                            <p><strong>العملة المحلية المطلوبة:</strong> {sanitizeInput(formData.payout_currency)}</p>
+                            <p><strong>المبلغ النهائي للاستلام (بالعملة المحلية):</strong> {sanitizeInput(formData.final_amount_due_local.toFixed(2))} {sanitizeInput(formData.payout_currency)}</p>
+                            <p><strong>بيانات حساب الاستلام:</strong> {sanitizeInput(formData.receiver_bank_info)}</p>
                         </div>
                         <button
                             onClick={handleShare}
@@ -615,7 +286,7 @@ ${orderDetails}
                         <div className="logo">
                             <img src="https://i.imgur.com/gK5yR45.png" alt="BitcoYemen Logo" className="h-10" />
                         </div>
-                        <h1 className="title">نموذج طلب شحن رصيد رقمي</h1>
+                        <h1 className="title">نموذج طلب سحب رصيد</h1>
                         {isSubmitting && (
                             <div className="text-center my-4">
                                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
@@ -627,11 +298,12 @@ ${orderDetails}
                                 <span>{error}</span>
                             </div>
                         )}
+                        
                         <div className="form-field">
                             <label>
-                                <span className="emoji">📝</span> نوع الرصيد المراد شحنه
+                                <span className="emoji">📝</span> نوع الرصيد المراد سحبه
                             </label>
-                            <p className="field-description">اختر ما إذا كان رصيدًا رقميًا (عملات مشفرة) أو رصيدًا في محفظة إلكترونية.</p>
+                            <p className="field-description">اختر ما إذا كنت تسحب من محفظة إلكترونية أو عملة رقمية.</p>
                             <select
                                 name="balance_type"
                                 value={formData.balance_type}
@@ -639,111 +311,167 @@ ${orderDetails}
                                 required
                             >
                                 <option value="">اختر...</option>
-                                <option value="crypto">عملة رقمية</option>
                                 <option value="wallet">محفظة إلكترونية</option>
                             </select>
                         </div>
-                        {formData.balance_type === 'crypto' && renderCryptoSection()}
-                        {formData.balance_type === 'wallet' && renderWalletSection()}
+
+                        {formData.balance_type === 'wallet' && (
+                            <>
+                                <div className="form-field">
+                                    <label>
+                                        <span className="emoji">👛</span> ما اسم المحفظة؟
+                                    </label>
+                                    <p className="field-description">حدد اسم المحفظة التي ستسحب منها (مثل PayPal).</p>
+                                    <select
+                                        name="wallet_name"
+                                        value={formData.wallet_name}
+                                        onChange={handleInputChange}
+                                        required
+                                    >
+                                        <option value="">اختر...</option>
+                                        <option value="PayPal">PayPal</option>
+                                        <option value="Payoneer">Payoneer</option>
+                                        <option value="Wise">Wise</option>
+                                        <option value="Perfect Money">Perfect Money</option>
+                                    </select>
+                                </div>
+                                <div className="form-field">
+                                    <label>
+                                        <span className="emoji">💵</span> العملة داخل المحفظة
+                                    </label>
+                                    <p className="field-description">حدد عملة المحفظة التي ستسحب منها.</p>
+                                    <select
+                                        name="wallet_currency"
+                                        value={formData.wallet_currency}
+                                        onChange={handleInputChange}
+                                        required
+                                    >
+                                        <option value="USD">USD</option>
+                                        <option value="EUR">EUR</option>
+                                    </select>
+                                </div>
+                                <div className="form-field">
+                                    <label>
+                                        <span className="emoji">💰</span> المبلغ المطلوب سحبه
+                                    </label>
+                                    <p className="field-description">أدخل الكمية التي ترغب بسحبها من رصيدك.</p>
+                                    <input
+                                        type="number"
+                                        name="amount_requested"
+                                        value={formData.amount_requested}
+                                        onChange={handleInputChange}
+                                        required
+                                        min="1"
+                                        step="1"
+                                    />
+                                </div>
+                                <div className="form-field">
+                                    <label>
+                                        <span className="emoji">🔗</span> عنوان المحفظة / البريد الإلكتروني للمرسل
+                                    </label>
+                                    <p className="field-description">أدخل عنوان محفظتك أو البريد الإلكتروني الذي سترسل منه المبلغ.</p>
+                                    <input
+                                        type="text"
+                                        name="sender_address"
+                                        value={formData.sender_address}
+                                        onChange={handleInputChange}
+                                        required
+                                    />
+                                </div>
+                            </>
+                        )}
+                        
+                        {formData.amount_requested > 0 && (
+                            <div className="info-box red my-2">
+                                <p>
+                                    <span className="font-bold">رسوم الخدمة:</span> {formData.service_fee_value.toFixed(2)} {formData.wallet_currency}
+                                </p>
+                                <p className="mt-1">
+                                    <span className="font-bold">المبلغ الصافي المستلم:</span> {(formData.amount_requested - formData.service_fee_value).toFixed(2)} {formData.wallet_currency}
+                                </p>
+                            </div>
+                        )}
+
                         <div className="form-field">
                             <label>
-                                <span className="emoji">💰</span> الكمية المطلوبة
+                                <span className="emoji">🏦</span> طريقة الاستلام المفضلة
                             </label>
-                            <p className="field-description">أدخل الكمية التي ترغب باستلامها (مثلاً: 100).</p>
-                            <input
-                                type="number"
-                                name="amount_requested"
-                                value={formData.amount_requested}
-                                onChange={handleInputChange}
-                                required
-                                min="0.01"
-                                step="0.01"
-                            />
-                        </div>
-                        <div className="form-field">
-                            <label>
-                                <span className="emoji">💸</span> رسوم الخدمة
-                            </label>
-                            <p className="field-description">يتم احتسابها تلقائيًا بناءً على الكمية ونوع الرصيد.</p>
-                            <input
-                                type="text"
-                                name="service_fee_value"
-                                value={formData.service_fee_value.toFixed(2)}
-                                readOnly
-                                className="bg-gray-100 cursor-not-allowed"
-                            />
-                        </div>
-                        <div className="form-field">
-                            <label>
-                                <span className="emoji">📥</span> عنوان الاستلام
-                            </label>
-                            <p className="field-description">أدخل عنوان المحفظة أو عنوان العملة الرقمية بدقة.</p>
-                            <textarea
-                                name="receiver_address"
-                                rows="3"
-                                value={formData.receiver_address}
-                                onChange={handleInputChange}
-                                required
-                            ></textarea>
-                        </div>
-                        <div className="form-field">
-                            <label>
-                                <span className="emoji">📝</span> ملاحظات إضافية (اختياري)
-                            </label>
-                            <p className="field-description">يمكنك كتابة أي ملاحظات أو تفاصيل إضافية هنا.</p>
-                            <textarea
-                                name="notes"
-                                rows="2"
-                                value={formData.notes}
-                                onChange={handleInputChange}
-                            ></textarea>
-                        </div>
-                        {renderPaymentMethodSection()}
-                        <div className="form-field">
-                            <label>
-                                <span className="emoji">💱</span> العملة التي ستدفع بها
-                            </label>
-                            <p className="field-description">اختر عملتك المحلية أو الدولار لإتمام عملية الدفع.</p>
+                            <p className="field-description">اختر الطريقة التي تفضلها لاستلام المبلغ بالعملة المحلية.</p>
                             <select
-                                name="payment_currency"
-                                value={formData.payment_currency}
+                                name="payout_method"
+                                value={formData.payout_method}
                                 onChange={handleInputChange}
                                 required
                             >
                                 <option value="">اختر...</option>
-                                <option value="ريال سعودي">ريال سعودي</option>
-                                <option value="ريال يمني شمال">ريال يمني شمال</option>
-                                <option value="ريال يمني جنوب">ريال يمني جنوب</option>
-                                <option value="دولار أمريكي">دولار أمريكي</option>
+                                <option value="العمقي">العمقي للصرافة</option>
+                                <option value="بنك القطيبي">بنك القطيبي</option>
+                                <option value="بنك الكريمي">بنك الكريمي</option>
+                                <option value="تحويل بنكي سعودي">تحويل بنكي سعودي</option>
                             </select>
                         </div>
-                        <div className="info-box">
-                            <label className="font-bold">
-                                <span className="emoji">🔢</span> المبلغ النهائي المطلوب دفعه
+                        <div className="form-field">
+                            <label>
+                                <span className="emoji">🌍</span> العملة المحلية المطلوبة
                             </label>
-                            <p className="text-sm text-gray-600 mb-2">
-                                سعر الصرف هو: {formData.payment_currency === 'دولار أمريكي' ? '1.00' : (exchangeRates[formData.payment_currency] || '...')} (مقابل 1 دولار).
-                            </p>
-                            <p className="text-lg font-bold text-blue-600">
-                                {formData.final_amount_due_usd.toFixed(2)} دولار أمريكي
-                            </p>
-                            {formData.payment_currency !== 'دولار أمريكي' && (
-                                <p className="text-lg font-bold text-blue-600 mt-1">
-                                    {formData.final_amount_due_converted.toFixed(2)} {formData.payment_currency}
-                                </p>
-                            )}
+                            <p className="field-description">اختر العملة التي ترغب باستلامها.</p>
+                            <select
+                                name="payout_currency"
+                                value={formData.payout_currency}
+                                onChange={handleInputChange}
+                                required
+                            >
+                                <option value="ريال يمني جديد">ريال يمني (جديد)</option>
+                                <option value="ريال يمني قديم">ريال يمني (قديم)</option>
+                                <option value="ريال سعودي">ريال سعودي</option>
+                            </select>
                         </div>
+                        <div className="form-field">
+                            <label>
+                                <span className="emoji">📄</span> بيانات حساب الاستلام
+                            </label>
+                            <p className="field-description">اكتب تفاصيل حسابك (رقم الحساب، اسم المستلم، إلخ).</p>
+                            <textarea
+                                name="receiver_bank_info"
+                                value={formData.receiver_bank_info}
+                                onChange={handleInputChange}
+                                required
+                                rows="3"
+                                placeholder="مثلاً:
+اسم المستلم: علي محمد
+رقم الحساب: 123456789
+البنك: بنك الكريمي"
+                            ></textarea>
+                        </div>
+                        <div className="form-field">
+                            <label>
+                                <span className="emoji">✍️</span> ملاحظات إضافية (اختياري)
+                            </label>
+                            <textarea
+                                name="notes"
+                                value={formData.notes}
+                                onChange={handleInputChange}
+                                rows="2"
+                                placeholder="اكتب أي ملاحظات إضافية..."
+                            ></textarea>
+                        </div>
+                        
+                        <div className="total-amount-box">
+                            المبلغ النهائي الذي ستستلمه: {formData.final_amount_due_local.toFixed(2)} {formData.payout_currency}
+                        </div>
+
                         <button
                             type="submit"
-                            disabled={isSubmitting}
                             className="submit-button mt-4"
+                            disabled={isSubmitting}
                         >
-                            {isSubmitting ? 'جاري الإرسال...' : 'إرسال الطلب'}
+                            إرسال طلب السحب
                         </button>
                     </form>
                 </div>
             );
         };
+
         ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
